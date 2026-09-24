@@ -1,0 +1,52 @@
+# jobbot configuration. Copy to config.yaml (python -m jobbot init does this for you).
+
+profile_path: profile.yaml
+db_path: data/jobbot.sqlite3
+output_dir: data/applications     # per-job folder: tailored cv.pdf, cover_letter.pdf/.txt, answers.json, final.png
+
+llm:
+  base_url: http://localhost:11434
+  model: qwen3:4b                 # any Ollama chat model; "qwen:4b" also works (the think flag is auto-dropped)
+  num_ctx: 8192
+  temperature: 0.2
+  think: false
+  timeout_s: 300
+
+browser:
+  headless: false                 # keep false: lets you log in and clear CAPTCHAs when the bot asks
+  user_data_dir: data/browser_profile   # your LinkedIn/Indeed logins live here (log in via `python -m jobbot login`)
+  slow_mo_ms: 60
+  channel: ""                     # set to "chrome" to drive your installed Chrome
+
+search:
+  sources: [linkedin, indeed]
+  queries:
+    - keywords: Python developer
+      location: Manchester, United Kingdom
+    - keywords: Junior software engineer
+      location: United Kingdom
+  max_jobs_per_query: 25
+  posted_within_days: 7
+  remote_only: false
+  easy_apply_only: false          # true = only LinkedIn Easy Apply / Indeed Apply jobs (fewer external forms)
+
+filters:
+  include_title_keywords: []      # e.g. [python, developer, engineer]; empty = any title
+  exclude_title_keywords: [senior, principal, director, head of, lead, manager]
+  exclude_companies: []
+  min_match_score: 60             # 0-100 (blend of skill overlap and Qwen's fit rating)
+
+apply:
+  auto_submit: false              # false = ask you (y/N in the terminal) before every final submit
+  dry_run: false                  # true = fill everything, never press the final submit button
+  max_per_day: 15                 # hard daily cap - keep this low on LinkedIn/Indeed
+  max_pages_per_application: 15
+  handoff: wait                   # wait = pause for you on CAPTCHA/login/account walls; skip = give up on that job
+  handoff_timeout_s: 300
+  skip_if_unsure: true            # skip the job rather than guess a REQUIRED answer the profile can't supply
+  min_delay_s: 2.0
+  max_delay_s: 6.0
+  tailor_cv: true
+  rewrite_bullets: false          # LLM re-words CV bullets (guarded against new facts); slower
+  write_cover_letter: true
+  accept_consent_checkboxes: true # ticks "I agree to the privacy policy" boxes; marketing opt-ins are always declined

@@ -1,0 +1,131 @@
+# Copy to profile.yaml and edit. This is the ONLY source of truth the bot uses:
+# it will never invent employers, qualifications, dates or figures beyond what is written here.
+
+personal:
+  first_name: Alex
+  last_name: Morgan
+  preferred_name: Alex
+  email: alex.morgan@example.com
+  phone: "07700 900123"          # national format; country code is separate
+  phone_country_code: "+44"
+  address_line1: 12 Example Street
+  city: Manchester
+  county: Greater Manchester
+  postcode: M1 1AA
+  country: United Kingdom
+  linkedin: https://www.linkedin.com/in/alex-morgan-example
+  github: https://github.com/alexmorgan-example
+  website: ""
+  current_title: Junior Software Developer
+  current_company: Northern Data Ltd
+  years_experience: 2
+
+work_auth:
+  right_to_work_uk: true
+  requires_sponsorship: false
+  nationality: British
+  security_clearance: none        # none / BPSS / SC / DV
+
+preferences:
+  notice_period: 1 month
+  earliest_start_date: ""          # ISO date (2026-11-01) or leave blank to derive from notice period
+  salary_expectation: 34000        # GBP per year
+  salary_minimum: 30000
+  willing_to_relocate: false
+  work_arrangement: hybrid         # onsite / hybrid / remote
+  driving_licence: true
+  dbs_check_ok: true
+  over_18: true
+  how_did_you_hear: LinkedIn
+  previously_employed_by_applicant_company: false
+
+# UK equal-opportunities monitoring. EVERYTHING defaults to prefer_not_to_say.
+# Only change a value if you are happy for it to be entered on forms; the bot
+# never infers any of these from your CV or name. Use the wording a form would use,
+# e.g. ethnicity: "Asian or Asian British - Indian", gender: "Woman", disability: "No".
+demographics:
+  gender: prefer_not_to_say
+  gender_same_as_birth: prefer_not_to_say
+  ethnicity: prefer_not_to_say
+  sexual_orientation: prefer_not_to_say
+  religion: prefer_not_to_say
+  disability: prefer_not_to_say
+  age_range: prefer_not_to_say
+  date_of_birth: ""               # only entered if a form insists on a date and this is set (YYYY-MM-DD)
+  marital_status: prefer_not_to_say
+  caring_responsibilities: prefer_not_to_say
+  veteran: prefer_not_to_say
+  pregnancy_or_maternity: prefer_not_to_say
+  socio_economic_background: prefer_not_to_say
+  school_type: prefer_not_to_say
+  free_school_meals: prefer_not_to_say
+  first_generation_university: prefer_not_to_say
+  disability_adjustments: ""      # blank = none requested. Write what you need if you want it stated.
+
+summary: >
+  Python developer with two years' experience building data pipelines and internal web tools,
+  comfortable working across the stack from SQL to REST APIs. Keen to grow in a collaborative
+  engineering team that values clean, well-tested code.
+
+experience:
+  - title: Junior Software Developer
+    company: Northern Data Ltd
+    location: Manchester
+    start: Sep 2024
+    end: Present
+    tech: [Python, FastAPI, PostgreSQL, Docker, pytest]
+    bullets:
+      - Built and maintained FastAPI services used by the operations team to track customer orders.
+      - Wrote ETL jobs in Python and SQL that load supplier data into PostgreSQL every night.
+      - Added pytest coverage to the order-tracking service, catching regressions before release.
+      - Containerised three internal tools with Docker to simplify deployment.
+      - Fixed performance problems in slow SQL queries by adding indexes and rewriting joins.
+  - title: Software Engineering Intern
+    company: BrightPath Software
+    location: Leeds
+    start: Jun 2023
+    end: Aug 2023
+    tech: [JavaScript, React, Node.js]
+    bullets:
+      - Built a React dashboard component for the customer support team.
+      - Fixed front-end bugs raised by testers and reviewed by senior developers.
+
+education:
+  - institution: University of Manchester
+    degree: BSc Computer Science
+    start: "2021"
+    end: "2024"
+    grade: First Class Honours
+
+projects:
+  - name: Job Tracker CLI
+    description: Command-line tool for tracking job applications in SQLite.
+    tech: [Python, SQLite]
+    bullets:
+      - Designed a small SQLite schema and a Python CLI for adding and searching applications.
+
+skills:
+  - category: Languages
+    items: [Python, SQL, JavaScript, TypeScript]
+  - category: Frameworks & tools
+    items: [FastAPI, React, Node.js, Docker, Git, pytest, PostgreSQL]
+
+certifications:
+  - AWS Certified Cloud Practitioner
+
+languages:
+  - English (native)
+
+# Your own answers to recurring custom questions. `match` is a regex tested against the field label.
+answer_bank:
+  - match: "(prefer|strong|best|favou?rite).*programming language|programming language.*(prefer|strong|best|favou?rite)"
+    answer: Python
+  - match: "gdpr|data protection"
+    answer: I am familiar with GDPR principles from handling customer data in my current role.
+
+# Free-form facts the LLM may draw on. Keys are matched against question text too.
+extra_facts:
+  preferred_locations: Manchester, Leeds, remote within the UK
+
+# Optional: a PDF to upload if tailoring fails
+master_cv_pdf: ""
