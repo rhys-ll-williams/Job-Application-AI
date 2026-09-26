@@ -17,12 +17,15 @@ from playwright.sync_api import Page
 from ..config import SearchConfig, SearchQuery
 from .base import ApplyTarget, Posting, click_and_follow, first_text, hrefs
 
-TITLE = ["h1.t-24", ".job-details-jobs-unified-top-card__job-title h1", ".jobs-unified-top-card__job-title", "h1"]
+TITLE = ["h1.t-24", ".job-details-jobs-unified-top-card__job-title h1", ".jobs-unified-top-card__job-title",
+         ".top-card-layout__title", "h1"]
+# Two different layouts in practice: the logged-in app (.job-details-...., .jobs-unified-....) and the public,
+# logged-out job view (.topcard__...) that a pasted link usually opens to first. Both are tried.
 COMPANY = [".job-details-jobs-unified-top-card__company-name", ".jobs-unified-top-card__company-name",
-           ".artdeco-entity-lockup__subtitle", "a[href*='/company/']"]
+           ".artdeco-entity-lockup__subtitle", ".topcard__org-name-link", "a[href*='/company/']"]
 LOCATION = [".job-details-jobs-unified-top-card__primary-description-container", ".jobs-unified-top-card__bullet",
-            ".artdeco-entity-lockup__caption"]
-DESCRIPTION = ["#job-details", ".jobs-description__content", ".jobs-box__html-content", "article"]
+            ".artdeco-entity-lockup__caption", ".topcard__flavor--bullet"]
+DESCRIPTION = ["#job-details", ".jobs-description__content", ".jobs-box__html-content", ".description__text", "article"]
 MODAL = 'div[role="dialog"]'
 _LOGIN_URL = re.compile(r"/login|/uas/|/checkpoint|authwall|/signup", re.I)
 
