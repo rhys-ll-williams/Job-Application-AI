@@ -15,7 +15,9 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+from urllib.parse import urlparse
 
+from playwright.sync_api import Error as PWError
 from playwright.sync_api import Page, Playwright
 
 from .browser import BrowserSession
@@ -30,6 +32,7 @@ from .llm import LLMClient
 
 _BLOCKER_NOTE = {"captcha": "this page looks like a CAPTCHA / verification check",
                 "login": "this page looks like a login wall"}
+MIN_DESCRIPTION_CHARS = 40  # below this, the scrape probably missed the real content (login wall, JS not settled, ...)
 
 
 @dataclass
@@ -69,6 +72,84 @@ def active_page(browser: BrowserSession, notify: Callable[[str], None] = print) 
     return pages[-1]
 
 
+def scrape_advert(page: Page, url: str) -> JobInfo:
+    """Best-effort extraction of title/company/location/description from a job advert page.
+
+    LinkedIn and Indeed job pages are read with the same adapters `search`/`apply` use, since
+    their layouts are already handled there. Any other site gets a generic best-effort read
+    (page title, og:site_name, and the page's visible text as the description).
+    """
+    host = urlparse(url).netloc.lower()
+    if "linkedin.com" in host:
+        from .sources.base import Posting
+        from .sources.linkedin import LinkedIn
+        p = LinkedIn().details(page, Posting("linkedin", "", url))
+        return JobInfo(p.title, p.company, p.location, p.description, url)
+    if "indeed." in host:
+        from .sources.base import Posting
+        from .sources.indeed import Indeed
+        p = Indeed().details(page, Posting("indeed", "", url))
+        return JobInfo(p.title, p.company, p.location, p.description, url)
+
+    page.goto(url, wait_until="domcontentloaded")
+    page.wait_for_timeout(1200)
+    title = (page.title() or "").strip()
+    company = ""
+    try:
+        og_site = page.locator('meta[property="og:site_name"]').first
+        if og_site.count():
+            company = (og_site.get_attribute("content") or "").strip()
+    except PWError:
+        pass
+    body = ""
+    try:
+        body = page.inner_text("body")[:4000]
+    except PWError:
+        pass
+    return JobInfo(title=title[:150], company=(company or host)[:100], location="", description=body, url=url)
+
+
+def resolve_job(browser: BrowserSession, *, title: str, company: str, location: str, description: str,
+                advert_url: str, notify: Callable[[str], None] = print) -> tuple[str, str, str, str]:
+    """Fill in whatever of (title, company, description, location) is still missing.
+
+    If `advert_url` is given, it's fetched first (on the current tab, so you end up looking at
+    it) and used for anything not already given explicitly. Single-line prompts (title, company)
+    are asked before the multi-line description paste, so a real terminal's EOF-per-line-read for
+    Ctrl+D/Ctrl+Z doesn't get consumed by the wrong prompt.
+    """
+    if advert_url:
+        page = active_page(browser, notify) or browser.new_page()
+        notify(f"[jobbot] reading the advert from {advert_url} ...")
+        try:
+            info = scrape_advert(page, advert_url)
+        except PWError as exc:
+            notify(f"[jobbot] couldn't load that page ({str(exc).splitlines()[0]}) - you'll need to fill in the details yourself.")
+            info = JobInfo(url=advert_url)
+        title, company = title or info.title, company or info.company
+        location, description = location or info.location, description or info.description
+        if title or company:
+            notify(f"[jobbot] found: {title or '(no title found)'} at {company or '(no company found)'}"
+                  + (f", {location}" if location else ""))
+
+    if not title:
+        title = input("job title: ").strip()
+    if not company:
+        company = input("company: ").strip()
+    if len(description) < MIN_DESCRIPTION_CHARS:
+        if description:
+            notify("[jobbot] couldn't read much of a description from that page - it may need you to be logged in "
+                  "first (`python -m jobbot login`), or the text may be behind something I can't see. Paste the "
+                  "description below, then press Ctrl+Z then Enter (Windows) or Ctrl+D (Unix) - or just press that "
+                  "straight away to carry on with what little was found:")
+        else:
+            notify("paste the job description, then press Ctrl+Z then Enter (Windows) or Ctrl+D (Unix):")
+        pasted = sys.stdin.read().strip()
+        if pasted:
+            description = pasted
+    return title, company, description, location
+
+
 def fill_once(page: Page, job: JobSession, notify: Callable[[str], None] = print) -> PageFillResult:
     """Fill whatever is on the current page right now. Never clicks anything."""
     blocker = detect_blocker(page)
@@ -86,15 +167,17 @@ def fill_once(page: Page, job: JobSession, notify: Callable[[str], None] = print
     return result
 
 
-def run_interactive(cfg: Config, profile: Profile, llm: LLMClient | None, *, title: str, company: str,
-                    description: str, location: str = "", url: str = "",
+def run_interactive(cfg: Config, profile: Profile, llm: LLMClient | None, *, title: str = "", company: str = "",
+                    description: str = "", location: str = "", url: str = "", advert_url: str = "",
                     notify: Callable[[str], None] = print) -> None:
     with BrowserSession(cfg.browser) as bs:
+        title, company, description, location = resolve_job(bs, title=title, company=company, location=location,
+                                                             description=description, advert_url=advert_url, notify=notify)
         job = prepare_session(cfg, profile, llm, bs.pw, bs.pdf_browser, title, company, description, location, notify)
-        page = bs.new_page()
+        page = active_page(bs, notify) or bs.new_page()
         if url:
             page.goto(url, wait_until="domcontentloaded")
-        else:
+        elif not advert_url:
             notify("[jobbot] browser open - log in and navigate to the application yourself, then come back here.")
 
         notify("\n[jobbot] on each page of the form:\n"
@@ -107,12 +190,10 @@ def run_interactive(cfg: Config, profile: Profile, llm: LLMClient | None, *, tit
             if cmd in {"q", "quit", "exit"}:
                 break
             if cmd == "n":
-                title = input("job title: ").strip()
-                company = input("company: ").strip()
-                notify("paste the job description, then press Ctrl+Z then Enter (Windows) or Ctrl+D (Unix):")
-                description = sys.stdin.read()
-                location = input("location (optional): ").strip()
-                job = prepare_session(cfg, profile, llm, bs.pw, bs.pdf_browser, title, company, description, location, notify)
+                new_url = input("job advert URL (or leave blank to type the details yourself): ").strip()
+                nt, nc, nd, nl = resolve_job(bs, title="", company="", location="", description="",
+                                            advert_url=new_url, notify=notify)
+                job = prepare_session(cfg, profile, llm, bs.pw, bs.pdf_browser, nt, nc, nd, nl, notify)
                 continue
             if cmd.startswith("u "):
                 target = active_page(bs, notify) or bs.new_page()

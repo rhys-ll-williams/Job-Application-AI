@@ -126,18 +126,12 @@ def cmd_apply(args) -> None:
 
 
 def cmd_fill(args) -> None:
-    """Simple, manual, one-job-at-a-time filler: you paste the advert and drive the browser; it fills each page."""
+    """Simple, manual, one-job-at-a-time filler: give it the advert (link, file, or paste) and drive the browser."""
     cfg, profile, llm, _db = _setup(args)
     from .formfiller import run_interactive
-    title = args.title or input("job title: ").strip()
-    company = args.company or input("company: ").strip()
-    if args.description_file:
-        description = Path(args.description_file).read_text(encoding="utf-8")
-    else:
-        console.print("paste the job description, then press Ctrl+Z then Enter (Windows) or Ctrl+D (Unix):")
-        description = sys.stdin.read()
-    run_interactive(cfg, profile, llm, title=title, company=company, description=description,
-                   location=args.location or "", url=args.url or "", notify=_notify)
+    description = Path(args.description_file).read_text(encoding="utf-8") if args.description_file else ""
+    run_interactive(cfg, profile, llm, title=args.title or "", company=args.company or "", description=description,
+                   location=args.location or "", url=args.url or "", advert_url=args.advert_url or "", notify=_notify)
 
 
 def cmd_apply_url(args) -> None:
@@ -224,8 +218,11 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--title")
     sp.add_argument("--company")
     sp.add_argument("--location", default="")
-    sp.add_argument("--description-file", help="path to a text file with the job advert (else you'll be asked to paste it)")
-    sp.add_argument("--url", help="open the browser straight to this page")
+    sp.add_argument("--advert-url", help="the job advert's URL - read automatically (LinkedIn/Indeed read directly; "
+                                        "other sites get a best-effort generic read) instead of a file or paste")
+    sp.add_argument("--description-file", help="path to a text file with the job advert (else you'll be asked to paste it, "
+                                               "unless --advert-url is given)")
+    sp.add_argument("--url", help="open the browser straight to this page to apply, if different from --advert-url")
     sp = add("run", cmd_run, "search, score and apply (the autonomous loop)", run_flags=True)
     sp.add_argument("--forever", action="store_true")
     sp.add_argument("--interval-hours", type=float, default=6)

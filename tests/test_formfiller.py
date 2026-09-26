@@ -16,7 +16,7 @@ import mock_ats  # noqa: E402
 
 from jobbot.config import ApplyConfig, LLMConfig, load_profile  # noqa: E402
 from jobbot.forms.dom import snapshot  # noqa: E402
-from jobbot.formfiller import active_page, fill_once, prepare_session  # noqa: E402
+from jobbot.formfiller import active_page, fill_once, prepare_session, resolve_job, scrape_advert  # noqa: E402
 from jobbot.llm import LLMError, OllamaLLM  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -93,17 +93,18 @@ def test_manual_filler_never_clicks_and_keeps_context(server, llm, tmp_path):
     assert mock_ats.SUBMISSIONS == []  # the filler must never submit anything
 
 
-def test_active_page_prefers_most_recent_tab(server, llm, tmp_path):
-    profile = load_profile(ROOT / "profile.example.yaml")
-    cfg = FakeCfg(tmp_path)
+class FakeBrowserSession:
+    def __init__(self, ctx):
+        self.context = ctx
+
+    def new_page(self):
+        return self.context.new_page()
+
+
+def test_active_page_prefers_most_recent_tab(server):
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
         context = browser.new_context()
-
-        class FakeBrowserSession:
-            def __init__(self, ctx):
-                self.context = ctx
-
         p1 = context.new_page()
         p1.goto(server + "/classic/step/1")
         p2 = context.new_page()
@@ -111,4 +112,43 @@ def test_active_page_prefers_most_recent_tab(server, llm, tmp_path):
         assert active_page(FakeBrowserSession(context), notify=lambda *a: None) is p2
         p2.close()
         assert active_page(FakeBrowserSession(context), notify=lambda *a: None) is p1
+        browser.close()
+
+
+def test_scrape_advert_generic_fallback(server):
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        page = browser.new_page()
+        info = scrape_advert(page, server + "/advert/generic")
+        assert info.title == "Backend Python Developer - Acme Robotics"
+        assert info.company == "Acme Robotics"
+        assert "FastAPI" in info.description and "PostgreSQL" in info.description
+        browser.close()
+
+
+def test_resolve_job_from_advert_url_needs_no_prompt(server):
+    """A good scrape should need no input() / stdin at all - if it did, this test would hang."""
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        context = browser.new_context()
+        title, company, description, location = resolve_job(
+            FakeBrowserSession(context), title="", company="", location="", description="",
+            advert_url=server + "/advert/generic", notify=lambda *a: None)
+        assert title == "Backend Python Developer - Acme Robotics"
+        assert company == "Acme Robotics"
+        assert "FastAPI" in description
+        browser.close()
+
+
+def test_resolve_job_falls_back_to_paste_when_scrape_is_too_thin(server, monkeypatch):
+    import io
+    monkeypatch.setattr("sys.stdin", io.StringIO("A real pasted job description, long enough to pass the check.\n"))
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        context = browser.new_context()
+        # /cookie returns a two-byte "ok" body with no <title> - too thin to use as a description
+        title, company, description, location = resolve_job(
+            FakeBrowserSession(context), title="Junior Developer", company="Acme Robotics", location="",
+            description="", advert_url=server + "/cookie?c=reject", notify=lambda *a: None)
+        assert description.startswith("A real pasted job description")
         browser.close()

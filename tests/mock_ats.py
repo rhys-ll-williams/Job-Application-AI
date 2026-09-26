@@ -177,6 +177,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(page("<h1>Backend Python Developer</h1><p>Acme Robotics builds warehouse robots. You will build FastAPI "
                                    "services, write SQL against PostgreSQL and containerise apps with Docker. Hybrid in Manchester.</p>"
                                    '<p><a role="button" href="/classic/step/1">Apply now</a></p>'))
+        if u.path == "/advert/generic":  # a job-board/company page with its own <title> and og:site_name, unlike page()
+            body = ("<!doctype html><html><head><meta charset=utf-8>"
+                   "<title>Backend Python Developer - Acme Robotics</title>"
+                   '<meta property="og:site_name" content="Acme Robotics">'
+                   f"{CSS}</head><body><h1>Backend Python Developer</h1><p>Acme Robotics builds warehouse robots. "
+                   "You will build FastAPI services, write SQL against PostgreSQL and containerise apps with Docker. "
+                   "Hybrid in Manchester.</p></body></html>").encode()
+            return self._send(body)
         if u.path == "/classic/done":
             return self._send(page("<h1>Thank you for applying!</h1><p>We have received your application.</p>"))
         self._send(page("<h1>Acme ATS</h1>"), 200)

@@ -28,9 +28,17 @@ it can from your profile and the advert - using the same LLM (`qwen3:4b`) for th
 parts. **It never clicks Next or Submit.** This is the one to reach for by default.
 
 ```bash
+python -m jobbot fill --advert-url "https://www.linkedin.com/jobs/view/12345..."   # reads the advert for you
 python -m jobbot fill --title "Backend Developer" --company "Acme Robotics" --description-file jd.txt
-# or omit --description-file and it asks you to paste the advert; add --url to open straight to the job page
+# or give none of these and it asks you to paste the advert
 ```
+`--advert-url` reads the title/company/location/description straight from the page - LinkedIn and Indeed job
+pages are read properly (the same code the search adapters use); any other site gets a best-effort generic
+read (page title, `og:site_name`, visible text). If that comes back too thin (behind a login wall, or text
+rendered in a way it can't see), it says so and asks you to paste the description instead - it never guesses
+a job title or company. The browser is left sitting on that page, so you can just click Apply. `--url` is only
+for when you want to open a *different* page to apply on (e.g. the advert is on LinkedIn but you're applying on
+the company's own site) - if you don't give one, it opens straight to `--advert-url`.
 ```
 > [Enter]
 [jobbot] filled 8/10 fields on this page
