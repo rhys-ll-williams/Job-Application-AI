@@ -22,6 +22,8 @@ _SUCCESS = re.compile(
     r"your application (has been|was) (sent|submitted|received)|application sent|"
     r"you('ve| have) (successfully )?applied|application complete", re.I)
 _LOGIN = re.compile(r"sign in|log ?in|create (an )?account|register|sign up", re.I)
+_COOKIE_REJECT = re.compile(r"^(reject( all| non-?essential)?|decline( all)?|(use )?(only )?(strictly )?(necessary|essential)( cookies)?( only)?|"
+                            r"deny|refuse|no thanks|got it|dismiss|close)$", re.I)
 
 SUBMIT_RE = re.compile(r"submit|send application|finish|complete application|confirm (and|&) (apply|send)|^apply( now)?$|^send$", re.I)
 NEXT_RE = re.compile(r"^(next|continue|proceed|save (and|&) (continue|next)|review( (your )?application)?|go to (the )?next|"
@@ -30,6 +32,19 @@ IGNORE_RE = re.compile(r"back|previous|cancel|discard|close|dismiss|save for lat
                        r"\badd\b|remove|edit|delete|choose file|attach|browse|search|clear|reset|autofill|manage|help|privacy|cookie|"
                        r"accept all|reject|decline|settings|menu|sign up|create account|register|apply with|use my|linkedin|indeed|"
                        r"google|facebook|apple|more|show|hide|preview|download|print|english|language|translate", re.I)
+
+
+def dismiss_cookies(page: Page) -> None:
+    """Privacy-first: reject/necessary-only, never 'accept all'."""
+    try:
+        for b in page.locator("button:visible, a[role=button]:visible").all()[:60]:
+            txt = (b.inner_text(timeout=300) or "").strip()
+            if _COOKIE_REJECT.match(txt) and b.evaluate("e => !!e.closest('[id*=cookie i],[class*=cookie i],[id*=consent i],[class*=consent i],[id*=onetrust i],[class*=banner i]')"):
+                b.click(timeout=1500)
+                page.wait_for_timeout(400)
+                return
+    except PWError:
+        pass
 
 
 def detect_blocker(page: Page) -> str | None:

@@ -19,12 +19,41 @@ python -m jobbot check         # verifies profile, model, browser
 python -m jobbot login         # log in to LinkedIn / Indeed YOURSELF; the session is kept in data/browser_profile
 ```
 
-## Use
+## Two ways to use this
+
+**`fill` - simple, manual, one job at a time.** You paste in an advert, it tailors a CV and cover
+letter, then *you* drive the browser: log in, open the application, click Apply, solve any CAPTCHA.
+On every page (including later pages of a multi-step form) you press Enter and it fills in whatever
+it can from your profile and the advert - using the same LLM (`qwen3:4b`) for the free-text/tailoring
+parts. **It never clicks Next or Submit.** This is the one to reach for by default.
+
+```bash
+python -m jobbot fill --title "Backend Developer" --company "Acme Robotics" --description-file jd.txt
+# or omit --description-file and it asks you to paste the advert; add --url to open straight to the job page
+```
+```
+> [Enter]
+[jobbot] filled 8/10 fields on this page
+  [profile ] First name                                     -> 'Alex'
+  [llm     ] Why do you want to work here?                   -> 'I'm drawn to Acme Robotics because...'
+[jobbot] needs your attention (required, could not answer):
+   - Current salary: not in your profile - never guessed
+>                                    # you click Next in the browser yourself, then press Enter again
+```
+Commands at the `>` prompt: **Enter** = fill the current page, **`u <url>`** = open a URL, **`n`** = start a new job
+(re-tailors documents), **`q`** = quit. The job/CV/cover-letter context is kept for the whole session, so later
+pages of the same form don't need the advert re-pasted.
+
+**`run` / `search` / `apply` - autonomous, many jobs, no supervision by default.** Searches LinkedIn/Indeed,
+scores postings, and works through the queue clicking Next/Submit itself, asking you to confirm each final
+submit unless `auto_submit: true`. This is the higher-risk, higher-effort mode - see "Things you should know"
+below before turning it on.
 
 | Command | What it does |
 |---|---|
-| `python -m jobbot tailor --title "X" --company "Y" --description-file jd.txt` | Make the tailored CV + cover letter PDFs for a pasted job description. Touches no website. **Start here** to judge quality. |
-| `python -m jobbot apply-url <url> --dry-run` | Fill a company/ATS form (any site) but stop before the final submit. |
+| `python -m jobbot fill ...` | The manual filler described above. **Start here.** |
+| `python -m jobbot tailor --title "X" --company "Y" --description-file jd.txt` | Just the tailored CV + cover letter PDFs, no browser at all. |
+| `python -m jobbot apply-url <url> --dry-run` | Autonomous: fill a company/ATS form end to end (clicking Next/Submit) but stop before the final submit. |
 | `python -m jobbot search` | Find + score new jobs from your configured queries, queue the good ones. |
 | `python -m jobbot apply --dry-run` | Work through the queue, filling forms without submitting. |
 | `python -m jobbot apply` | Apply for real. By default it asks `Submit? [y/N]` before each final submit. |
@@ -32,27 +61,27 @@ python -m jobbot login         # log in to LinkedIn / Indeed YOURSELF; the sessi
 | `python -m jobbot status` | What was found / applied / needs you. |
 | `python -m jobbot answers [set "question" "answer"]` | See or override remembered answers. Your overrides are never replaced by the LLM. |
 
-**Recommended first week:** `tailor` -> `apply-url --dry-run` on a few real postings -> `apply --dry-run` -> then
-`apply` with the default confirm prompt. Only set `apply.auto_submit: true` once you've read a batch of
-`data/applications/*/answers.json` and are happy with what it writes.
+**Recommended first week:** `tailor` to judge CV/cover-letter quality, then `fill` on a few real postings so you
+watch exactly what it enters before anything is submitted. Only reach for the autonomous `run`/`apply` once
+you've read a batch of `data/applications/*/answers.json` and are happy with what it writes, and only set
+`apply.auto_submit: true` after that.
 
 Each application leaves a folder in `data/applications/<id>-<company>-<title>/` with the exact CV and cover
-letter that were sent, `answers.json` (every field, what was entered, and where the answer came from:
-`profile` / `demographic` / `bank` / `memory` / `llm`), `tailoring.json`, and `final.png`.
+letter that were generated, `tailoring.json`, and (autonomous mode only) `answers.json` and `final.png`.
 
 ## How it works
 
+Both tools share the same field-answering engine (`jobbot/forms/`); they differ only in what decides to move
+to the next page.
+
 ```
-search (LinkedIn/Indeed adapters) -> hard filters + score (skills overlap + Qwen fit rating)
-  -> tailor CV (select/reorder your real facts; Qwen writes only the summary) + cover letter
-  -> open apply form (Easy Apply modal / Indeed Apply / follow "Apply" to company site)
-  -> FormAgent loop, per page:
-       blockers? (CAPTCHA / login wall -> hand to you)   success text? -> done
-       snapshot every field on the page and in iframes (label, type, options, required)
-       answer each field:  your answer_bank -> eligibility rules -> UK diversity rules -> profile
-                           -> remembered answers -> Qwen (only for REQUIRED fields the rules can't answer)
-       click Next/Continue/Review; on the final page: submit (or ask you / dry-run)
-       validation errors? retry with alternate formats (phone, dates), then give up cleanly
+tailor CV (select/reorder your real facts; Qwen writes only the summary) + cover letter
+  -> snapshot every field on the page and in iframes (label, type, options, required)
+  -> answer each field:  your answer_bank -> eligibility rules -> UK diversity rules -> profile
+                         -> remembered answers -> Qwen (only for REQUIRED fields the rules can't answer)
+  -> `fill`: report what was filled/left blank, then WAIT - you click Next/Submit yourself
+  -> `run`/`apply`: click Next/Continue/Review itself; on the final page: submit (or ask you / dry-run);
+     blockers? (CAPTCHA/login wall) -> hand to you;  validation errors? retry with alternate formats, else give up
 ```
 
 Why deterministic-first: a 4B model is fine at "which option matches this?" and at short grounded text,
@@ -72,9 +101,10 @@ falls back to "prefer not to say" rather than picking a different category. If a
 no such option, the job is flagged for you rather than guessed.
 
 ### What it will not do
-* Solve or bypass CAPTCHAs / bot checks (it pauses and waits for you; `handoff: skip` skips the job).
+* Solve or bypass CAPTCHAs / bot checks. `fill` just tells you it saw one and leaves it alone; the autonomous
+  `run`/`apply` pauses and waits for you (`handoff: skip` skips the job instead).
 * Type your passwords, create accounts, or complete sign-up walls (Workday-style "create an account" pages
-  are handed to you; you register once, the bot continues).
+  are left for you; you register once, then continue).
 * Invent experience: the CV only ever contains your own bullets/skills, reordered and selected.
 * Guess required answers it has no basis for (`skip_if_unsure`), e.g. *current* salary.
 * Tick marketing / talent-pool / "follow company" boxes (always declined). Privacy/terms-consent boxes are
@@ -82,9 +112,12 @@ no such option, the job is flagged for you rather than guessed.
 
 ## Things you should know
 
-* **Terms of service.** LinkedIn and Indeed prohibit automated access; accounts can be restricted. The bot uses
-  your real logged-in browser session, human-like pacing and a hard daily cap (default 15), and no evasion
-  techniques, but the risk is yours. Keep `max_per_day` low.
+* **Terms of service.** LinkedIn and Indeed prohibit automated access; accounts can be restricted. `fill` is the
+  lower-risk mode - you do all the clicking and submitting, it only writes into fields you're looking at. The
+  autonomous `run`/`apply` goes further (it navigates and submits itself across many jobs); it uses your real
+  logged-in session, human-like pacing and a hard daily cap (default 15), but the ToS risk is still yours to
+  weigh, and no anti-detection/evasion techniques are used - a site's bot checks are treated as a hard stop, not
+  something to defeat. Keep `max_per_day` low.
 * **Site adapters are best-effort.** LinkedIn/Indeed change their pages regularly and require login, so the
   adapters in `jobbot/sources/` use layered fallbacks (links and text roles first, class names last) and have
   not been verified against your live account. If a step breaks, the `error.png` / `error.html` (or

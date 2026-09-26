@@ -125,6 +125,21 @@ def cmd_apply(args) -> None:
     console.print("result:", res or "nothing queued")
 
 
+def cmd_fill(args) -> None:
+    """Simple, manual, one-job-at-a-time filler: you paste the advert and drive the browser; it fills each page."""
+    cfg, profile, llm, _db = _setup(args)
+    from .formfiller import run_interactive
+    title = args.title or input("job title: ").strip()
+    company = args.company or input("company: ").strip()
+    if args.description_file:
+        description = Path(args.description_file).read_text(encoding="utf-8")
+    else:
+        console.print("paste the job description, then press Ctrl+Z then Enter (Windows) or Ctrl+D (Unix):")
+        description = sys.stdin.read()
+    run_interactive(cfg, profile, llm, title=title, company=company, description=description,
+                   location=args.location or "", url=args.url or "", notify=_notify)
+
+
 def cmd_apply_url(args) -> None:
     cfg, profile, llm, db = _setup(args)
     from .applicant import Applicant
@@ -205,6 +220,12 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--limit", type=int)
     sp = add("apply-url", cmd_apply_url, "apply to a company/ATS page directly", run_flags=True)
     sp.add_argument("url")
+    sp = add("fill", cmd_fill, "manual, page-at-a-time filler: paste one job advert, you drive the browser")
+    sp.add_argument("--title")
+    sp.add_argument("--company")
+    sp.add_argument("--location", default="")
+    sp.add_argument("--description-file", help="path to a text file with the job advert (else you'll be asked to paste it)")
+    sp.add_argument("--url", help="open the browser straight to this page")
     sp = add("run", cmd_run, "search, score and apply (the autonomous loop)", run_flags=True)
     sp.add_argument("--forever", action="store_true")
     sp.add_argument("--interval-hours", type=float, default=6)
